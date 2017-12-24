@@ -74,4 +74,11 @@ where PM : PresentationModel, C : Controller, C : PmView<PM> {
         navigationMessagesDisposable.dispose()
         presentationModel.lifecycleConsumer.accept(Lifecycle.DESTROYED)
     }
+
+    /**
+     * You must call this method from the containing [Controller]'s corresponding method.
+     */
+    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        // TODO:
+    }
 }

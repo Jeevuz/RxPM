@@ -80,4 +80,9 @@ where PM : PresentationModel, PM : MapPmExtension {
         super.onLowMemory()
         delegate.onLowMemory()
     }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        delegate.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
 }

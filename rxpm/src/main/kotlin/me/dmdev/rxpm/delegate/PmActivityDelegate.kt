@@ -91,4 +91,11 @@ where PM : PresentationModel, A : Activity, A : PmView<PM> {
         navigationMessagesDisposable.dispose()
         outlast.onDestroy()
     }
+
+    /**
+     * You must call this method from the containing [Activity]'s corresponding method.
+     */
+    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        // TODO:
+    }
 }

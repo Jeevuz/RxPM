@@ -58,4 +58,9 @@ abstract class PmSupportActivity<PM : PresentationModel> : AppCompatActivity(), 
         super.onDestroy()
         delegate.onDestroy()
     }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        delegate.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
 }

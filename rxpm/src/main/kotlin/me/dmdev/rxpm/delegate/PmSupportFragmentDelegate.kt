@@ -91,4 +91,8 @@ where PM : PresentationModel, F : Fragment, F : PmView<PM> {
         navigationMessagesDisposable.dispose()
         outlast.onDestroy()
     }
+
+    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        // TODO:
+    }
 }

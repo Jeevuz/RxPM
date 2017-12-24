@@ -104,4 +104,11 @@ where PM : PresentationModel, PM : MapPmExtension, F: Fragment, F : MapPmView<PM
     fun onLowMemory() {
         mapPmViewDelegate.onLowMemory()
     }
+
+    /**
+     * You must call this method from the containing [Fragment]'s corresponding method.
+     */
+    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        // TODO:
+    }
 }

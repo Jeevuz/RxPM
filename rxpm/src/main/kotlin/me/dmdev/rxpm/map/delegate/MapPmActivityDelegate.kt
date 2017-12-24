@@ -98,4 +98,11 @@ where PM : PresentationModel, PM : MapPmExtension, A : Activity, A : MapPmView<P
     fun onLowMemory() {
         mapPmViewDelegate.onLowMemory()
     }
+
+    /**
+     * You must call this method from the containing [Activity]'s corresponding method.
+     */
+    fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        // TODO:
+    }
 }
