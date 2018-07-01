@@ -1,0 +1,202 @@
+package me.dmdev.rxpm.lint
+
+import com.android.tools.lint.checks.CleanupDetector
+import com.android.tools.lint.checks.CleanupDetector.getVariableElement
+import com.android.tools.lint.detector.api.*
+import com.android.tools.lint.detector.api.Detector.UastScanner
+import com.android.tools.lint.detector.api.JavaContext.Companion.getMethodName
+import com.intellij.psi.PsiMethod
+import org.jetbrains.uast.*
+import org.jetbrains.uast.visitor.AbstractUastVisitor
+
+class UntilDetector : Detector(), UastScanner {
+
+    companion object {
+        val SUBSCRIBE_WITHOUT_UNTIL = Issue.create(
+            "SubscribeWithoutUntil",
+            "Subscription without `untilUnbind()` or `untilDestroy()` method",
+            "After calling `subscribe()`, call `untilUnbind()` or `untilDestroy()` " +
+                    "to dispose the subscription when you don't need it " +
+                    "(when unbinded or destroyed).",
+            Category.CORRECTNESS,
+            5,
+            Severity.WARNING,
+            Implementation(
+                UntilDetector::class.java,
+                Scope.JAVA_FILE_SCOPE
+            )
+        )
+
+        const val SUBSCRIBE = "subscribe"
+        const val UNTIL_UNBIND = "untilUnbind"
+        const val UNTIL_DESTROY = "untilDestroy"
+        const val PM = "me.dmdev.rxpm.PresentationModel"
+        const val DISPOSABLE = "io.reactivex.disposables.Disposable"
+        const val MESSAGE =
+            "Call to `subscribe()` without a corresponding `untilUnbind()` or `untilDestroy()`"
+    }
+
+    override fun getApplicableMethodNames(): List<String>? {
+        return listOf(SUBSCRIBE)
+    }
+
+    /** Made from [CleanupDetector] code. */
+    override fun visitMethod(
+        context: JavaContext,
+        node: UCallExpression, @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE") calledMethod: PsiMethod
+    ) {
+
+        if (isSubscribeInPm(context, calledMethod)) {
+
+            val boundVariable = getVariableElement(node, true, true)
+
+            if (hasUntilCallInChain(context, node)) {
+                return
+            }
+
+            if (boundVariable != null) {
+                val method = node.getParentOfType<UMethod>(UMethod::class.java, true)
+                @Suppress("FoldInitializerAndIfToElvis")
+                if (method == null) {
+                    return
+                }
+                val untilCallVisitor = object : FinishVisitor(context, boundVariable) {
+                    override fun isCleanupCall(call: UCallExpression): Boolean {
+                        if (isUntilMethodCall(mContext, call)) {
+                            val chain = call.getOutermostQualified().getQualifiedChain()
+                            if (chain.isEmpty()) {
+                                return false
+                            }
+                            var operand: UExpression? = chain[0]
+                            if (operand != null) {
+                                var resolved = operand.tryResolve()
+                                //noinspection SuspiciousMethodCalls
+                                if (resolved != null && mVariables.contains(resolved)) {
+                                    return true
+                                } else if (resolved is PsiMethod
+                                    && operand is UCallExpression
+                                    && hasUntilCallInChain(mContext, operand)) {
+                                    // Check that the target of the chains with untill call is the
+                                    // right variable!
+                                    while (operand is UCallExpression) {
+                                        operand = operand.receiver
+                                    }
+                                    if (operand is UReferenceExpression) {
+                                        resolved = operand.resolve()
+                                        //noinspection SuspiciousMethodCalls
+                                        if (resolved != null && mVariables.contains(resolved)) {
+                                            return true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return false
+                    }
+                }
+                method.accept(untilCallVisitor)
+                if (untilCallVisitor.isCleanedUp || untilCallVisitor.variableEscapes()) {
+                    return
+                }
+            } else if (node.getParentOfType<UReturnExpression>(UReturnExpression::class.java) != null) {
+                // Allocation is in a return statement
+                return
+            }
+
+            context.report(SUBSCRIBE_WITHOUT_UNTIL, node, context.getLocation(node), MESSAGE)
+        }
+    }
+
+    private fun isSubscribeInPm(context: JavaContext, method: PsiMethod): Boolean {
+        if (method.name == SUBSCRIBE) {
+            val containingClass = method.containingClass
+            val evaluator = context.evaluator
+            return containingClass != null
+                    && evaluator.extendsClass(containingClass, PM, false)
+                    && evaluator.typeMatches(method.returnType, DISPOSABLE)
+        }
+        return false
+    }
+
+    private fun hasUntilCallInChain(context: JavaContext, node: UCallExpression): Boolean {
+        val chain = node.getOutermostQualified().getQualifiedChain()
+        if (!chain.isEmpty()) {
+            val lastExpression = chain[chain.size - 1]
+            if (lastExpression is UCallExpression) {
+                if (isUntilMethodCall(context, lastExpression)) {
+                    return true
+                }
+
+                // with, run, let, apply, etc chained to the end of this call
+                if (lastArgCallsUntil(context, lastExpression)) {
+                    return true
+                }
+            }
+        }
+
+        // Surrounding with-call?
+        val parentCall = node.getParentOfType<UCallExpression>(UCallExpression::class.java, true)
+        if (parentCall != null) {
+            val methodName = getMethodName(parentCall)
+            if ("with" == methodName) {
+                val args = parentCall.valueArguments
+                return args.size == 2 && lastArgCallsUntil(context, parentCall)
+            }
+        }
+
+        return false
+    }
+
+    private fun isUntilMethodCall(context: JavaContext, call: UCallExpression): Boolean {
+        val methodName = getMethodName(call)
+        if (UNTIL_UNBIND == methodName || UNTIL_DESTROY == methodName) {
+            val method = call.resolve()
+            if (method != null) {
+                val containingClass = method.containingClass
+                val evaluator = context.evaluator
+                return evaluator.extendsClass(
+                    containingClass,
+                    DISPOSABLE,
+                    false
+                )
+            } else if (call.valueArgumentCount == 0) {
+                // Couldn't find method but it *looks* like an untilSomething call
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun lastArgCallsUntil(
+        context: JavaContext,
+        methodInvocation: UCallExpression
+    ): Boolean {
+        val args = methodInvocation.valueArguments
+        if (!args.isEmpty()) {
+            val last = args[args.size - 1]
+            if (last is ULambdaExpression) {
+                val body = last.body
+
+                val visitor = UntilCallVisitor(context)
+                body.accept(visitor)
+                return visitor.isFound
+            }
+        }
+
+        return false
+    }
+
+    private inner class UntilCallVisitor(
+        private val context: JavaContext
+    ) : AbstractUastVisitor() {
+        var isFound: Boolean = false
+
+        override fun visitCallExpression(node: UCallExpression): Boolean {
+            if (isUntilMethodCall(context, node)) {
+                isFound = true
+            }
+            return super.visitCallExpression(node)
+        }
+    }
+}

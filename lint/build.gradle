@@ -1,0 +1,18 @@
+apply plugin: 'java-library'
+apply plugin: 'kotlin'
+
+dependencies {
+    compileOnly "com.android.tools.lint:lint-api:$rootProject.ext.lintVersion"
+    compileOnly "com.android.tools.lint:lint-checks:$rootProject.ext.lintVersion"
+    testImplementation "com.android.tools.lint:lint:$rootProject.ext.lintVersion"
+    testImplementation "com.android.tools.lint:lint-tests:$rootProject.ext.lintVersion"
+}
+
+sourceCompatibility = "1.8"
+targetCompatibility = "1.8"
+
+jar {
+    manifest {
+        attributes("Lint-Registry-v2": "me.dmdev.rxpm.lint.RxPmIssueRegistry")
+    }
+}
