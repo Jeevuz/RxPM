@@ -1,15 +1,13 @@
 package me.dmdev.rxpm.lint
 
 import com.android.tools.lint.checks.CleanupDetector
-import com.android.tools.lint.checks.CleanupDetector.getVariableElement
 import com.android.tools.lint.detector.api.*
-import com.android.tools.lint.detector.api.Detector.UastScanner
-import com.android.tools.lint.detector.api.JavaContext.Companion.getMethodName
 import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.*
 import org.jetbrains.uast.visitor.AbstractUastVisitor
 
-class UntilDetector : Detector(), UastScanner {
+
+class UntilDetector : Detector(), Detector.UastScanner {
 
     companion object {
         val SUBSCRIBE_WITHOUT_UNTIL = Issue.create(
@@ -48,7 +46,7 @@ class UntilDetector : Detector(), UastScanner {
 
         if (isSubscribeInPm(context, calledMethod)) {
 
-            val boundVariable = getVariableElement(node, true, true)
+            val boundVariable = CleanupDetector.getVariableElement(node, true, true)
 
             if (hasUntilCallInChain(context, node)) {
                 return
@@ -137,7 +135,7 @@ class UntilDetector : Detector(), UastScanner {
         // Surrounding with-call?
         val parentCall = node.getParentOfType<UCallExpression>(UCallExpression::class.java, true)
         if (parentCall != null) {
-            val methodName = getMethodName(parentCall)
+            val methodName = JavaContext.getMethodName(parentCall)
             if ("with" == methodName) {
                 val args = parentCall.valueArguments
                 return args.size == 2 && lastArgCallsUntil(context, parentCall)
@@ -148,7 +146,7 @@ class UntilDetector : Detector(), UastScanner {
     }
 
     private fun isUntilMethodCall(context: JavaContext, call: UCallExpression): Boolean {
-        val methodName = getMethodName(call)
+        val methodName = JavaContext.getMethodName(call)
         if (UNTIL_UNBIND == methodName || UNTIL_DESTROY == methodName) {
             val method = call.resolve()
             if (method != null) {
